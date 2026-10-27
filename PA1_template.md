@@ -1,0 +1,211 @@
+# Reproducible Research: Peer Assessment 1
+
+## Carga y preprocesamiento de los datos
+
+Primero cargamos los datos y convertimos la columna `date` al formato de fecha.
+
+
+```r
+activity <- read.csv("activity.csv")
+activity$date <- as.Date(activity$date)
+head(activity)
+```
+
+```
+##   steps       date interval
+## 1    NA 2012-10-01        0
+## 2    NA 2012-10-01        5
+## 3    NA 2012-10-01       10
+## 4    NA 2012-10-01       15
+## 5    NA 2012-10-01       20
+## 6    NA 2012-10-01       25
+```
+
+## ¿Cuál es el número medio total de pasos dados al día?
+
+Calculamos el total de pasos de cada día. En esta parte ignoramos los valores faltantes. Los días que no tienen ninguna observación de pasos se excluyen del cálculo.
+
+
+```r
+total_diario <- aggregate(steps ~ date, data=activity, FUN=sum)
+
+hist(total_diario$steps,
+     main="Total de pasos por día",
+     xlab="Número de pasos",
+     col="lightblue")
+```
+
+![plot of chunk pasos_por_dia](figure/pasos_por_dia-1.png)
+
+```r
+media_antes <- mean(total_diario$steps)
+mediana_antes <- median(total_diario$steps)
+media_antes
+```
+
+```
+## [1] 10766.19
+```
+
+```r
+mediana_antes
+```
+
+```
+## [1] 10765
+```
+
+La media es **1.076619 &times; 10<sup>4</sup>** pasos por día y la mediana es **1.0765 &times; 10<sup>4</sup>** pasos por día.
+
+## ¿Cuál es el patrón medio de actividad diaria?
+
+Calculamos la media de pasos de cada intervalo de cinco minutos y dibujamos una gráfica de líneas.
+
+
+```r
+promedio_intervalo <- aggregate(steps ~ interval, data=activity, FUN=mean)
+
+plot(promedio_intervalo$interval, promedio_intervalo$steps,
+     type="l",
+     main="Promedio de pasos por intervalo",
+     xlab="Intervalo de 5 minutos",
+     ylab="Promedio de pasos")
+```
+
+![plot of chunk patron_diario](figure/patron_diario-1.png)
+
+```r
+intervalo_max <- promedio_intervalo$interval[which.max(promedio_intervalo$steps)]
+intervalo_max
+```
+
+```
+## [1] 835
+```
+
+El intervalo con mayor promedio de pasos es el **835** (8:35 a. m.), con aproximadamente **206.17** pasos.
+
+## Imputación de valores faltantes
+
+Primero contamos cuántos valores faltantes hay en la columna `steps`.
+
+
+```r
+faltantes <- sum(is.na(activity$steps))
+faltantes
+```
+
+```
+## [1] 2304
+```
+
+Hay **2304** valores faltantes. Para completarlos usamos el promedio de pasos del mismo intervalo de cinco minutos, calculado con los días que sí tienen datos. Conservamos los valores originales cuando no son `NA`.
+
+
+```r
+activity_completa <- activity
+
+promedios <- promedio_intervalo$steps[
+  match(activity_completa$interval, promedio_intervalo$interval)
+]
+
+faltan <- is.na(activity_completa$steps)
+activity_completa$steps[faltan] <- promedios[faltan]
+
+sum(is.na(activity_completa$steps))
+```
+
+```
+## [1] 0
+```
+
+Calculamos de nuevo el total de pasos por día, hacemos el histograma y obtenemos la media y la mediana.
+
+
+```r
+total_diario_completo <- aggregate(steps ~ date,
+                                   data=activity_completa, FUN=sum)
+
+hist(total_diario_completo$steps,
+     main="Total de pasos por día después de imputar",
+     xlab="Número de pasos",
+     col="lightblue")
+```
+
+![plot of chunk resultados_imputacion](figure/resultados_imputacion-1.png)
+
+```r
+media_despues <- mean(total_diario_completo$steps)
+mediana_despues <- median(total_diario_completo$steps)
+media_despues
+```
+
+```
+## [1] 10766.19
+```
+
+```r
+mediana_despues
+```
+
+```
+## [1] 10766.19
+```
+
+Antes de imputar, la media fue **1.076619 &times; 10<sup>4</sup>** y la mediana **1.0765 &times; 10<sup>4</sup>**. Después de imputar, la media es **1.076619 &times; 10<sup>4</sup>** y la mediana **1.076619 &times; 10<sup>4</sup>**.
+
+La media casi no cambia, mientras que la mediana aumenta ligeramente. La imputación permite incluir también los días que originalmente no tenían registros de pasos, sin tratarlos como días de cero actividad.
+
+## Diferencias entre días laborables y fines de semana
+
+Creamos una variable con dos categorías. Los valores 0 y 6 de `wday` representan domingo y sábado, respectivamente.
+
+
+```r
+dia_semana <- as.POSIXlt(activity_completa$date)$wday
+
+activity_completa$tipo_dia <- ifelse(
+  dia_semana == 0 | dia_semana == 6,
+  "fin de semana", "día laborable"
+)
+
+activity_completa$tipo_dia <- factor(
+  activity_completa$tipo_dia,
+  levels=c("día laborable", "fin de semana")
+)
+
+promedio_tipo <- aggregate(steps ~ interval + tipo_dia,
+                           data=activity_completa, FUN=mean)
+```
+
+Hacemos un gráfico de dos paneles, uno para días laborables y otro para fines de semana.
+
+
+```r
+par(mfrow=c(2, 1))
+
+laborables <- subset(promedio_tipo, tipo_dia == "día laborable")
+fin_semana <- subset(promedio_tipo, tipo_dia == "fin de semana")
+
+limite_y <- c(0, max(promedio_tipo$steps))
+
+plot(laborables$interval, laborables$steps,
+     type="l", ylim=limite_y,
+     main="Día laborable",
+     xlab="Intervalo de 5 minutos",
+     ylab="Promedio de pasos")
+
+plot(fin_semana$interval, fin_semana$steps,
+     type="l", ylim=limite_y,
+     main="Fin de semana",
+     xlab="Intervalo de 5 minutos",
+     ylab="Promedio de pasos")
+```
+
+![plot of chunk grafico_tipo_dia](figure/grafico_tipo_dia-1.png)
+
+```r
+par(mfrow=c(1, 1))
+```
+
+Los gráficos permiten comparar los horarios de mayor actividad. En los días laborables se observa un pico más marcado por la mañana, mientras que en los fines de semana la actividad está más repartida durante el día.
